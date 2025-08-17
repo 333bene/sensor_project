@@ -2,12 +2,8 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
-from streamlit_autorefresh import st_autorefresh
 
 CSV_FILE = "final_merged_sensor_data.csv"
-
-# Auto-refresh every 10 seconds
-st_autorefresh(interval=10000, key="datarefresh")
 
 @st.cache_data
 def load_data():
@@ -54,50 +50,49 @@ if not metrics:
     st.warning("Please select at least one metric!")
 else:
     chart_df = filtered_df[["timestamp"] + metrics].copy()
-    chart_df = chart_df.dropna(subset=["timestamp"])
+chart_df = chart_df.dropna(subset=["timestamp"])
 
-    if chart_df.empty:
-        st.warning("No data for the selected date range and metrics!")
-    else:
-        chart_type = st.selectbox("Choose visualization", ["Line Chart", "Scatter Plot", "Stacked Hourly Bar Chart"])
+color_scale = alt.Scale(domain=["temperature", "humidity"],
+                        range=["#1f77b4", "#aec7e8"])
 
-        color_scale = alt.Scale(domain=["temperature", "humidity"],
-                                range=["#1f77b4", "#aec7e8"]) 
+if chart_df.empty:
+    st.warning("No data for the selected date range and metrics!")
+else:
+    chart_type = st.selectbox("Choose chart type", ["Line Chart", "Scatter Plot", "Stacked Bar Chart"])
 
-        if chart_type == "Line Chart":
-            st.subheader("Line Chart")
-            st.line_chart(chart_df.set_index("timestamp"))
+    if chart_type == "Line Chart":
+        st.subheader("Line Chart")
+        st.line_chart(chart_df.set_index("timestamp"))
 
-        elif chart_type == "Scatter Plot":
-            st.subheader("Scatter Plot")
-            df_long = chart_df.melt(id_vars=["timestamp"], value_vars=metrics,
-                                    var_name="metric", value_name="value")
+    elif chart_type == "Scatter Plot":
+        st.subheader("Scatter Plot")
+        df_long = chart_df.melt(id_vars=["timestamp"], value_vars=metrics,
+                                var_name="metric", value_name="value")
 
-            scatter = alt.Chart(df_long).mark_circle(size=50).encode(
-                x=alt.X("timestamp:T", title="Timestamp"),
-                y=alt.Y("value:Q", title="Value"),
-                color=alt.Color("metric:N", scale=color_scale, title="Metric"),
-                tooltip=["timestamp", "metric", "value"]
-            ).interactive()
+        scatter = alt.Chart(df_long).mark_circle(size=40).encode(
+            x=alt.X("timestamp:T", title="Timestamp"),
+            y=alt.Y("value:Q", title="Value"),
+            color=alt.Color("metric:N", scale=color_scale, title="Metric"),
+            tooltip=["timestamp", "metric", "value"]
+        ).interactive()
 
-            st.altair_chart(scatter, use_container_width=True)
+        st.altair_chart(scatter, use_container_width=True)
 
-        elif chart_type == "Stacked Hourly Bar Chart":
-            st.subheader("Stacked Hourly Bar Chart")
-            df_bar = chart_df.copy()
-            df_bar['hour'] = df_bar['timestamp'].dt.floor('h')
-            df_long_bar = df_bar.melt(id_vars=["hour"], value_vars=metrics,
-                                      var_name="metric", value_name="value")
+    elif chart_type == "Stacked Bar Chart":
+        st.subheader("Stacked Hourly Bar Chart")
+        df_bar = chart_df.copy()
+        df_bar['hour'] = df_bar['timestamp'].dt.floor('h')
+        df_long_bar = df_bar.melt(id_vars=["hour"], value_vars=metrics,
+                                  var_name="metric", value_name="value")
+        df_avg = df_long_bar.groupby(['hour', 'metric'], as_index=False).mean()
 
-            df_avg = df_long_bar.groupby(['hour', 'metric'], as_index=False).mean()
-
-            stacked_chart = alt.Chart(df_avg).mark_bar().encode(
-                x=alt.X("hour:T", title="Hour"),
-                y=alt.Y("value:Q", title="Value"),
-                color=alt.Color("metric:N", scale=color_scale, title="Metric"),
-                tooltip=["hour", "metric", "value"]
-            )
-            st.altair_chart(stacked_chart, use_container_width=True)
+        stacked_chart = alt.Chart(df_avg).mark_bar().encode(
+            x=alt.X("hour:T", title="Hour"),
+            y=alt.Y("value:Q", title="Value"),
+            color=alt.Color("metric:N", scale=color_scale, title="Metric"),
+            tooltip=["hour", "metric", "value"]
+        )
+        st.altair_chart(stacked_chart, use_container_width=True)
 
 if st.checkbox("Show Raw Data"):
     st.subheader("Raw Sensor Data")
